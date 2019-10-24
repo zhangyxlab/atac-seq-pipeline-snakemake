@@ -40,7 +40,9 @@ GTF_DICT = {"hg38":"gencode.v28.annotation.gtf",
             "mm10":"gencode.vM14.annotation.gtf",
             "mm9":"gencode.vM1.annotation.gtf",
             "panTro6":"panTro6.gtf",
-            "calJac3":"calJac3.gtf"}
+            "calJac3":"calJac3.gtf",
+            "panPan2":"panPan2.gtf"
+            }
 
 GTF = GTF_DICT[GENOME]
 # dependencies.
