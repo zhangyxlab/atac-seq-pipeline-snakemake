@@ -8,7 +8,6 @@ function usage(){
 echo -e "Usage: $0 -g genome -e E-mail -s server"
 echo -e "\t-g [genome]: hg19, mm10, etc."
 echo -e "\t-e [email]: email address."
-echo -e "\t-s [server]: silencer or TSCC"
 exit 1
 }
 
@@ -17,7 +16,6 @@ do
   case $OPT in
     g) genome=$OPTARG;;
     e) email=$OPTARG;;
-    s) server=$OPTARG;;
     \?)
       echo "Invalid option: -$OPTARG" >& 2
       usage
@@ -35,15 +33,14 @@ if [ -z ${email+x} ];
   then echo -e "Please provide E-mail"; usage; exit; fi
 if [ -z ${genome+x} ]; then
   echo -e "Please provide genome, eg. mm10, hg19"; usage;exit; fi
-if [ -z ${server+x} ];
-  then echo -e "Please tell us the server, eg. silencer, TSCC"; usage;exit; fi
 
+SERVER=$(hostname)
 NTHREADS=30
 DIR=$(dirname $0)
 LOG=run-$(date +%Y-%m-%d-%H-%M-%S).log
 . ${DIR}/validate_programs.sh
 
-if [ $server == "silencer" ]; then
+if [ $SERVER == "silencer.sdsc.edu" ]; then
   source /projects/ps-renlab/share/Pipelines/environments/python3env/bin/activate
   ### unlock the directory
   touch Snakefile
@@ -54,7 +51,7 @@ if [ $server == "silencer" ]; then
   --configfile ${DIR}/config.yaml --config GENOME=$genome \
   2> >(tee -a $LOG >&2)
 
-elif [ $server == "TSCC" ]; then
+elif  [ $SERVER == "tscc-login1.sdsc.edu" ] || [ $SERVER == "tscc-login2.sdsc.edu" ]; then
 #  module load python
   unset PYTHONPATH
   source /projects/ps-renlab/share/Pipelines/environments/python3env_TSCC/bin/activate
@@ -77,7 +74,7 @@ elif [ $server == "TSCC" ]; then
   $(pwd)"  | mail -s "ChIP-seq analysis Done" -a $LOG  $email
   )
 else
-  echo -e "Invalide server option: $server"; exit 1;
+  echo -e "Unreconized server: $SERVER"; exit 1;
 
 fi
 
