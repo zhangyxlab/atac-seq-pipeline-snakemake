@@ -6,5 +6,4 @@
 SE_SUFFIX: ".fastq"
 R1_SUFFIX: "_R1.fastq"
 #R2_SUFFIX: "_R2.fastq.bz2"
-BOWTIE2_INDEX_PATH: "/projects/ps-renlab/share/bowtie2_indexes/"
-#BOWTIE2_INDEX_PATH: "/projects/ps-renlab/huh025/mm9_genome/non_bd_mm10/bowtie2_index/"
+BOWTIE2_INDEX_PATH: "/storage/zhangyanxiaoLab/share/bowtie2_index/"
