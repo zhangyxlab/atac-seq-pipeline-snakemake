@@ -10,7 +10,7 @@ BASE_DIR = workflow.basedir + "/../"
 f = os.listdir("fastq")
 
 ## match file names to detect if there are any read pairs. 
-m =[ re.search("(.*?)(|_1|_2|_r1|_r2|_R1|_R2).fastq.*",x) for x in f]
+m =[ re.search("(.*?)(|_1|_2|_r1|_r2|_R1|_R2)(_001)?.fastq.*",x) for x in f]
 name = [x.group(1) for x in m]
 for x in name:
   if name.count(x) >2:
