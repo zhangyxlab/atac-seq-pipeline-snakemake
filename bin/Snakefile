@@ -10,7 +10,9 @@ BASE_DIR = workflow.basedir + "/../"
 f = os.listdir("fastq")
 
 ## match file names to detect if there are any read pairs. 
-m =[ re.search("(.*?)(|_1|_2|_r1|_r2|_R1|_R2)(_001)?.fastq.*",x) for x in f]
+#m =[ re.search("(.*?)(|_1|_2|_r1|_r2|_R1|_R2)(_001)?.fastq.*",x) for x in f]
+## To match input from Jiangbei 
+m =[ re.search("(.*?)(|_R1|_R2)(_001)?.fastq.*",x) for x in f]
 name = [x.group(1) for x in m]
 for x in name:
   if name.count(x) >2:
@@ -28,8 +30,9 @@ for sample in FASTQ_DICT:
   FASTQ_DICT[sample].sort()
 SAMPLES = FASTQ_DICT.keys()
 
+
 print(SAMPLES)
-#print(FASTQ_DICT)
+print(FASTQ_DICT)
 with open("sample_info.json",'w') as fp:
   json.dump(FASTQ_DICT,fp)
 
@@ -44,28 +47,50 @@ MARKDUP=BASE_DIR+"dependencies/picard.jar MarkDuplicates"
 rule all:
   input: 
     expand("bam/{sample}.nodup.bam",sample=SAMPLES),
-    expand("bigWig/{sample}.nodup.bw",sample=SAMPLES)
+    expand("bigWig/{sample}.nodup.bw",sample=SAMPLES),
+    "all_sample.qc.txt"
 
+  #  expand9"fastq_trim/{sample}
+
+rule trim_adapters:
+  output: 
+    "fastq_trim/{sample}_val_1.fq.gz",
+    "fastq_trim/{sample}_val_2.fq.gz",
+#    "fastq_trim/{sample}_R1_001.fastq.gz_trimming_report.txt",
+    log="logs/{sample}.trim.log"
+  input: 
+    lambda wildcards: FASTQ_DICT[wildcards.sample]
+  threads: 1
+  run:
+    command= "trim_galore "+str(input[0]) + " " + str(input[1]) +" --paired " + \
+    "--cores 4 --output_dir fastq_trim --basename {wildcards.sample} 2> {output.log}"
+    shell(command)
 
 
 rule bowtie2_align:
   output: 
-    bam=temp("bam/{sample}.sorted.bam")
+    bam=temp("bam/{sample}.sorted.bam"),
+    raw_qc = "qc/{sample}.raw.flagstat.qc",
+    log="logs/{sample}.bowtie2.log"
   input:
-    lambda wildcards: FASTQ_DICT[wildcards.sample]
+#    lambda wildcards: FASTQ_DICT[wildcards.sample]
+    "fastq_trim/{sample}_val_1.fq.gz",
+    "fastq_trim/{sample}_val_2.fq.gz"
   threads: 10 
   run:
     print(input)
     if len(input) == 1:
       middle = "-U " + str(input)
     elif len(input) == 2:
-      middle = "-1 " + str(input[0]) + " -2 " + str(input[1]) + " -X 2000"
+#      middle = "-1 " + str(input[0]).replace("fastq","fastq_trim",1).replace(".fastq","_val_1.fq") + " -2 " + str(input[1]).replace("fastq","fastq_trim",1).replace(".fastq","_val_2.fq") + " -X 2000"
+      middle = "-1 " + str(input[0]) + " -2 " + str(input[1])  + " -X 2000"
     shell(
     "bowtie2 -x {BOWTIE2_INDEX} "
     "{middle} "
-    "-p {threads} |"
+    "-p {threads} 2> logs/{wildcards.sample}.bowtie2.log|"
     "samtools view -bS |"
-    "samtools sort -@ {threads} -m 4G > {output.bam}"
+    "samtools sort -@ {threads} -m 4G > {output.bam};"
+    "samtools flagstat {output.bam} > {output.raw_qc};"
     )
 
 rule bam_rmdup:
@@ -91,3 +116,46 @@ rule bam2bigwig:
   shell:
     "bamCoverage -b {input.bam} -o {output.bw} --outFileFormat bigwig "
     "-bs 50 --numberOfProcessors {threads} --normalizeUsing RPKM"
+
+rule lastqc:
+    input:
+        raw = expand("qc/{samples}.raw.flagstat.qc",samples=SAMPLES),
+        dup = expand("qc/{samples}.dup.qc",samples=SAMPLES),
+         trim = expand("logs/{samples}.trim.log",samples=SAMPLES)
+#        trim = expand("fastq_trim/{samples}_R1_001.fastq.gz_trimming_report.txt",samples=SAMPLES)
+    output:
+        "{sample}.qc.txt"
+    threads: 1
+    run:
+      out = open(output[0],'w')
+      out.write("\t".join(["Sample","Total","Trim","Mapped","Filtered","Uniq","Adapter%","Map%","Dup%"])+"\n")
+      for idx in range(len(input.raw)):
+        samples = re.match(r"qc\/(.*).raw.flagstat.qc",input.raw[idx]).groups()[0]
+        raw_file = open(input.raw[idx], 'r')
+        for line in raw_file:
+          words = line.strip().split(' ')
+          if len(words)>5:
+            if words[4] == "total":
+              trim = str(int(int(words[0])/2))
+            elif words[3] == "properly":
+              mapped = str(int(int(words[0])/2))
+        raw_file.close()
+        dup_file = open(input.dup[idx],'r')
+        for line in dup_file:
+          words = line.strip().split('\t')
+          if words[0] == "Unknown Library":
+            filt = words[2]
+            duplicates = words[6]
+            nodup = str(int(filt)-int(duplicates))
+        trim_file = open(input.trim[idx],'r')
+        for line in trim_file:
+          words = line.strip().split()
+          if words[:3] == ['Total', 'reads', 'processed:']:
+            total= words[3].replace(',','')
+          if words[:3] == ['Reads', 'with', 'adapters:']:
+            adapter_p = "%.2f"%(float(words[4][1:][:-2])/100)
+         
+        map_p = "%.2f"%(float(mapped)/float(trim))
+        dup_p = "%.2f"%(float(duplicates)/float(mapped))
+        out.write("\t".join([samples,total,trim,mapped,filt,nodup,adapter_p,map_p,dup_p])+"\n")
+
